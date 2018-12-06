@@ -1,0 +1,268 @@
+---
+- name: Update the /etc/hosts file with node name
+  tags: etchostsupdate
+  become: yes
+  become_user: root
+  lineinfile:
+    dest: "/etc/hosts"
+    regexp: "{{ansible_env.SSH_CONNECTION.split(' ')[2]}} {{ansible_hostname}}  {{ansible_hostname}}"
+    line: "{{ item }}"
+    state: present
+    backup: yes
+  register: etchostsupdate
+  with_items:
+    - "{{ hostvars[groups['app'][0]]['ansible_env'].SSH_CONNECTION.split(' ')[2] }}\t{{ hostvars[groups['app'][0]]['ansible_hostname']}}\t{{ hostvars[groups['app'][0]]['ansible_hostname']}}"
+    - "{{ hostvars[groups['app'][1]]['ansible_env'].SSH_CONNECTION.split(' ')[2] }}\t{{ hostvars[groups['app'][1]]['ansible_hostname']}}\t{{ hostvars[groups['app'][1]]['ansible_hostname']}}"
+
+- name: Create a unix user group - weblogic
+  become: yes
+  become_user: root
+  tags: app,groupcreate
+  group:
+    name: weblogic
+    state: present
+
+- name: Create a unix user and map to weblogic group
+  become: yes
+  become_user: root
+  tags: app,usercreate
+  user:
+    name: "weblogic"
+    comment: "weblogic user"
+    uid: 102
+    group: weblogic
+    state: present
+
+- name: Create a ORACLE_HOME directory
+  become: yes
+  become_user: root
+  tags: app
+  file:
+    dest: "{{oracle_home}}"
+    mode: 0755
+    owner: weblogic
+    group: weblogic
+    state: directory
+
+- name : Copy the JDK and Weblogic Installation files to ORACLE_HOME
+  become: yes
+  become_user: weblogic
+  tags: app,cpbinaries
+  copy:
+    src: "{{ item }}"
+    dest: "{{ oracle_home }}"
+    mode: 0755
+  with_items:
+    - "fmw_12.2.1.3.0_wls.jar"
+    - "server-jre-8u191-linux-x64.tar.gz"
+    - "oraInst.loc"
+    - "install.file"
+    - "DemoIdentity.jks"
+
+- name: Copy the Template files 
+  become: yes
+  become_user: weblogic
+  tags: cpscripts
+  template:
+     src: "{{ item.src }}"
+     dest: "{{ oracle_home }}/{{item.dest}}"
+     mode: 0755
+  with_items:
+    - { src: 'CreateDomain.sh.j2', dest: 'CreateDomain.sh' }
+    - { src: 'create-wls-domain.py.j2', dest: 'create-wls-domain.py' }
+    - { src: 'Map-Resources.j2', dest: 'Map-Resources.py' }
+
+- name : Install java
+  become: yes
+  become_user: weblogic
+  tags: installjava, app
+  shell: "tar -xzf server-jre*.tar.gz"
+  args:
+   chdir: "{{ oracle_home }}"
+  environment:
+   JAVA_HOME: "/opt/oracle/jdk1.8.0_191"
+   PATH: "{{JAVA_HOME}}/bin"
+
+- name: Crate a Soft link to java
+  become: yes
+  become_user: root
+  tags: linkjava
+  shell: "ln -s {{oracle_home}}/jdk1.8.0_191/bin/java /usr/bin/java"
+  ignore_errors: true
+
+- name : Validate Java
+  become: yes
+  become_user: weblogic
+  tags: app,vjava
+  command: "java -version"
+  register: javaver
+
+- debug:
+    msg: " Java Version Found {{ javaver.stderr }}"
+
+- name: Install Weblogic 
+  become: yes
+  become_user: weblogic
+  tags: installweblogic,app
+  register: wlsinstall
+  shell: "java -jar {{ oracle_home}}/fmw*.jar -silent -invPtrLoc {{oracle_home}}/oraInst.loc -responseFile {{oracle_home}}/install.file -ignoreSysPrereqs -force -novalidation ORACLE_HOME={{oracle_home}} INSTALL_TYPE='WebLogic Server'"
+  args:
+    chdir: "{{ oracle_home }}"
+  when: "'java version \"1.8.0_191\"' in javaver.stderr"
+  failed_when: "'failed' in wlsinstall.stderr"
+  changed_when: "'already installed' not in wlsinstall.stdout"
+
+
+- name: Set WLST Environment and Create Domain
+  tags: app,createdomain
+  become: yes
+  become_user: weblogic
+  shell:  "./CreateDomain.sh"
+  register: setwlsenv
+  args:
+    chdir: "{{ oracle_home }}"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+  environment:
+          USER_MEM_ARGS: "-Djava.security.egd=file:/dev/./urandom" 
+
+- debug:
+    msg: "{{ setwlsenv.stdout_lines }}"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+  
+
+
+- name: pack command execution
+  become: yes
+  become_user: weblogic
+  shell: "{{ wlshome }}/common/bin/pack.sh -domain={{domainroot}}/{{domain_name}} -template=/tmp/mwi.jar -template_name=remote_managed -managed=true"
+  register: packcommand
+  run_once: true
+  tags: app,pack
+  failed_when: "packcommand.stderr"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+
+- name: display pack template
+  become: yes
+  become_user: weblogic
+  run_once: true
+  command: "ls -lrt /tmp/mwi.jar"
+  register: output
+  failed_when: " 'No' in output.stderr"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+
+- name: change permission
+  become: yes
+  become_user: weblogic
+  run_once: true
+  file:
+    path: "{{item}}"
+    mode: 0775
+  with_items:
+    - "/tmp/mwi.jar"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+ 
+- include: sshkey-exchange-t2.yaml  
+
+- name: Copy the file
+  become: yes
+  become_user: weblogic
+  tags: sync
+  synchronize:
+    src: "{{ item }}"
+    dest: "{{ item }}"
+    mode: push
+  delegate_to: "{{groups['app'][0]}}"
+  register: syncfile
+  with_items:
+   - "/tmp/mwi.jar"
+  when: ansible_hostname == "{{groups['app'][1]}}"
+  
+- name: Run the unpack operation
+  become: yes
+  become_user: weblogic
+  shell: "{{ wlshome }}/common/bin/unpack.sh -domain={{domainroot}}/{{domain_name}} -template=/tmp/mwi.jar"
+  register: unpack
+  tags: app,unpack
+  when: ansible_hostname == "{{groups['app'][1]}}"
+
+- name: set the SSL listener to false in nodemanager.properties file
+  tags: replaceline
+  become: yes
+  become_user: weblogic
+  lineinfile:
+    dest: "{{ domainroot}}/{{ domain_name }}/nodemanager/nodemanager.properties"
+    regexp: "^SecureListener=true"
+    line: "SecureListener=false"
+    state: present
+    backup: yes
+  register: replaceline
+
+- name: start the nodemanager
+  tags: startnodemanager
+  become: yes
+  become_user: weblogic
+  shell: "./startNodeManager.sh > nodemanager.log &"
+  args:
+    chdir: "{{domainroot}}/{{domain_name}}/bin/"
+  register: startNodemanager
+  
+  
+- name: wait for the nodemanager to start and open the port 
+  tags: nmvalidate
+  wait_for:
+    host: "localhost"
+    port: 5556
+    delay: 10
+    timeout: 120
+    state: started
+
+
+- name: validating if the AdminServer is already started and running
+  tags: amprevalidate
+  wait_for:
+    host: "localhost"
+    port: "{{admin_ListenPort}}"
+    delay: 10
+    timeout: 30
+    state: started
+  when: ansible_hostname == "{{groups['app'][0]}}"
+  register: amprevalidate
+  ignore_errors: true
+
+- name: Start the AdminServer
+  tags: startadminserver
+  become: yes
+  become_user: weblogic
+  shell: "./startWebLogic.sh > adminserver.log &"
+  args:
+    chdir: "{{oracle_home}}/domains/{{domain_name}}/bin/"
+  register: startadminserver
+  run_once: yes
+  when: ansible_hostname == "{{ groups['app'][0] }}" and amprevalidate is failed
+  environment:
+          USER_MEM_ARGS: "-Djava.security.egd=file:/dev/./urandom"
+
+- name: wait for the adminserver to start and open the port 
+  tags: amvalidate
+  wait_for:
+    host: "localhost"
+    port: "{{admin_ListenPort}}"
+    delay: 10
+    timeout: 120
+    state: started
+  when: ansible_hostname == "{{groups['app'][0]}}"
+
+- name: Map Resources - Cluster and Machine
+  tags: mapresources
+  become: yes
+  become_user: weblogic
+  shell:  "source {{oracle_home}}/domains/{{domain_name}}/bin/setDomainEnv.sh && java weblogic.WLST {{ oracle_home }}/Map-Resources.py"
+  register: mapresources
+  args:
+    chdir: "{{ oracle_home }}"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+  environment:
+          USER_MEM_ARGS: "-Djava.security.egd=file:/dev/./urandom" 
+
+
+  

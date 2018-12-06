@@ -1,0 +1,9 @@
+--- 
+- name: Apache Weblogic Infrastructure Build
+  hosts: webandapp
+  #handlers:
+    #- include: handlers/handlers.yaml
+
+- hosts: app
+  roles:
+    - setup-weblogic

@@ -1,0 +1,22 @@
+#Application Servers
+[app]
+mwiapp04
+mwiapp05
+
+#Web Server
+[web]
+#mwiweb01
+
+
+#Group 'multi' with all servers
+[multi:children]
+web
+app
+
+#Variables that will be applied to all servers
+[multi:vars]
+ansible_ssh_user=vagrant
+ansible_ssh_private_key_file=~/.vagrant.d/insecure_private_key
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+

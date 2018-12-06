@@ -1,0 +1,30 @@
+# Paths
+oracle_home: "/opt/oracle"
+wlshome: "/opt/oracle/wlserver"
+domainroot: "/opt/oracle/domains"
+
+# Credentials
+domain_name: "mwidomain"
+domain_username: "weblogic"
+domain_password: "weblogic1"
+
+
+# Admin Server
+admin_ListenPort: 8001
+# The console should be accessed at this port over HTTPS once the domain is ready
+admin_AdministrationPort: 9001
+
+
+# Managed Server Names and the Cluster Name
+# First member of AppServers host group would be considered as node1 and will hold the ManagedServer1
+# Second member of AppServers host group would be considered as node2 where ManagedServer2 will be hosted.
+# They will be part of a Cluster named mentioned by you below
+# At later point you can extend the cluster or remove the members or even create new cluster as per your need
+# PACK and UNPACK will also be done.
+# 
+ManagedServer1_Name: mwiServer1
+ManagedServer1_Port: 8002
+ManagedServer2_Name: mwiServer2
+ManagedServer2_Port: 8002
+ClusterName: mwiCluster
+

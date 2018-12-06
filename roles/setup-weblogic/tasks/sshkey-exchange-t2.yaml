@@ -1,0 +1,23 @@
+- name: SSH KeyGen command
+  tags: run
+  shell: > 
+    ssh-keygen -q -b 2048 -t rsa -N "" -C "creating SSH" -f ~/.ssh/id_rsa
+    creates="~/.ssh/id_rsa"
+
+- name: Fetch the keyfile from one server to another
+  tags: run
+  fetch: 
+    src: "~/.ssh/id_rsa.pub"
+    dest: "buffer/{{ansible_hostname}}-id_rsa.pub"
+    flat: yes
+
+- name: Copy the key add to authorized_keys using Ansible module
+  tags: run
+  authorized_key:
+    user: "{{ ansible_user_id }}"
+    state: present
+    key: "{{ lookup('file','buffer/{{item.dest}}-id_rsa.pub')}}"
+  when: "{{ item.dest != ansible_hostname }}"
+  with_items: 
+    - { dest: "{{groups['app'][1]}}"}
+    - { dest: "{{groups['app'][0]}}"} 

@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+
+#Define DOMAIN_HOME
+export DOMAIN_HOME={{domainroot}}/{{domain_name}}
+echo "Domain Home is: " $DOMAIN_HOME
+
+ADD_DOMAIN=1
+if [ ! -f ${DOMAIN_HOME}/servers/AdminServer/security/boot.properties ]; then
+    ADD_DOMAIN=0
+fi
+
+# Create Domain only if 1st execution
+if [ $ADD_DOMAIN -eq 0 ]; then
+   # Create an empty domain
+   source {{wlshome}}/server/bin/setWLSEnv.sh
+   java weblogic.WLST -skipWLSModuleScanning {{oracle_home}}/create-wls-domain.py
+   mkdir -p ${DOMAIN_HOME}/servers/AdminServer/security/
+   echo "username="{{domain_username}} >> $DOMAIN_HOME/servers/AdminServer/security/boot.properties
+   echo "password="{{domain_password}} >> $DOMAIN_HOME/servers/AdminServer/security/boot.properties
+   ${DOMAIN_HOME}/bin/setDomainEnv.sh
+fi
+
+# Copy the Keyfile
+cp {{oracle_home}}/DemoIdentity.jks $DOMAIN_HOME/security/.
+
+# Start Admin Server 
+${DOMAIN_HOME}/bin/startWebLogic.sh > ${DOMAIN_HOME}/Adminserver.out &
+
+
+
