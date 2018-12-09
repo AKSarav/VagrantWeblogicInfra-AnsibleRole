@@ -1,4 +1,4 @@
-connect('{{domain_username}}','{{domain_password}}','t3://localhost:{{admin_ListenPort}}')
+connect('{{domain_username}}','{{domain_password}}','t3://{{ hostvars[groups['app'][0]]['ansible_env'].SSH_CONNECTION.split(' ')[2] }}:{{admin_ListenPort}}')
 edit()
 startEdit()
 
@@ -21,12 +21,12 @@ cmo.setCluster(getMBean(cbean_name))
 # =======================================
 cd('/Machines/{{ groups['app'][0] }}/NodeManager/{{ groups['app'][0] }}')
 cmo.setNMType('Plain')
-cmo.setListenAddress('localhost')
+cmo.setListenAddress("{{groups['app'][0] }}")
 cmo.setDebugEnabled(false)
 cmo.setListenPort(5556)
 cd('/Machines/{{ groups['app'][1] }}/NodeManager/{{ groups['app'][1] }}')
 cmo.setNMType('Plain')
-cmo.setListenAddress('localhost')
+cmo.setListenAddress("{{groups['app'][1] }}")
 cmo.setDebugEnabled(false)
 cmo.setListenPort(5556)
 

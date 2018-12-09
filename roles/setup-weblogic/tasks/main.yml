@@ -130,97 +130,10 @@
   when: "{{ ansible_hostname == groups['app'][0] }}"
   
 
-
-- name: pack command execution
-  become: yes
-  become_user: weblogic
-  shell: "{{ wlshome }}/common/bin/pack.sh -domain={{domainroot}}/{{domain_name}} -template=/tmp/mwi.jar -template_name=remote_managed -managed=true"
-  register: packcommand
-  run_once: true
-  tags: app,pack
-  failed_when: "packcommand.stderr"
-  when: "{{ ansible_hostname == groups['app'][0] }}"
-
-- name: display pack template
-  become: yes
-  become_user: weblogic
-  run_once: true
-  command: "ls -lrt /tmp/mwi.jar"
-  register: output
-  failed_when: " 'No' in output.stderr"
-  when: "{{ ansible_hostname == groups['app'][0] }}"
-
-- name: change permission
-  become: yes
-  become_user: weblogic
-  run_once: true
-  file:
-    path: "{{item}}"
-    mode: 0775
-  with_items:
-    - "/tmp/mwi.jar"
-  when: "{{ ansible_hostname == groups['app'][0] }}"
- 
-- include: sshkey-exchange-t2.yaml  
-
-- name: Copy the file
-  become: yes
-  become_user: weblogic
-  tags: sync
-  synchronize:
-    src: "{{ item }}"
-    dest: "{{ item }}"
-    mode: push
-  delegate_to: "{{groups['app'][0]}}"
-  register: syncfile
-  with_items:
-   - "/tmp/mwi.jar"
-  when: ansible_hostname == "{{groups['app'][1]}}"
-  
-- name: Run the unpack operation
-  become: yes
-  become_user: weblogic
-  shell: "{{ wlshome }}/common/bin/unpack.sh -domain={{domainroot}}/{{domain_name}} -template=/tmp/mwi.jar"
-  register: unpack
-  tags: app,unpack
-  when: ansible_hostname == "{{groups['app'][1]}}"
-
-- name: set the SSL listener to false in nodemanager.properties file
-  tags: replaceline
-  become: yes
-  become_user: weblogic
-  lineinfile:
-    dest: "{{ domainroot}}/{{ domain_name }}/nodemanager/nodemanager.properties"
-    regexp: "^SecureListener=true"
-    line: "SecureListener=false"
-    state: present
-    backup: yes
-  register: replaceline
-
-- name: start the nodemanager
-  tags: startnodemanager
-  become: yes
-  become_user: weblogic
-  shell: "./startNodeManager.sh > nodemanager.log &"
-  args:
-    chdir: "{{domainroot}}/{{domain_name}}/bin/"
-  register: startNodemanager
-  
-  
-- name: wait for the nodemanager to start and open the port 
-  tags: nmvalidate
-  wait_for:
-    host: "localhost"
-    port: 5556
-    delay: 10
-    timeout: 120
-    state: started
-
-
 - name: validating if the AdminServer is already started and running
   tags: amprevalidate
   wait_for:
-    host: "localhost"
+    host: "{{groups['app'][0]}}"
     port: "{{admin_ListenPort}}"
     delay: 10
     timeout: 30
@@ -245,7 +158,7 @@
 - name: wait for the adminserver to start and open the port 
   tags: amvalidate
   wait_for:
-    host: "localhost"
+    host: "{{groups['app'][0]}}"
     port: "{{admin_ListenPort}}"
     delay: 10
     timeout: 120
@@ -265,4 +178,94 @@
           USER_MEM_ARGS: "-Djava.security.egd=file:/dev/./urandom" 
 
 
-  
+- name: pack command execution
+  become: yes
+  become_user: weblogic
+  shell: "{{ wlshome }}/common/bin/pack.sh -domain={{domainroot}}/{{domain_name}} -template=/tmp/mwi.jar -template_name=remote_managed -managed=true"
+  register: packcommand
+  run_once: true
+  tags: app,packit
+  failed_when: "packcommand.stderr"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+
+- name: display pack template
+  become: yes
+  become_user: weblogic
+  tags: packit
+  run_once: true
+  command: "ls -lrt /tmp/mwi.jar"
+  register: output
+  failed_when: " 'No' in output.stderr"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+
+- name: change permission
+  become: yes
+  become_user: weblogic
+  tags: packit
+  run_once: true
+  file:
+    path: "{{item}}"
+    mode: 0775
+  with_items:
+    - "/tmp/mwi.jar"
+  when: "{{ ansible_hostname == groups['app'][0] }}"
+
+- include: sshkey-exchange-t2.yaml 
+
+- name: Copy the file
+  become: yes
+  become_user: weblogic
+  tags: sync,packit
+  synchronize:
+    src: "{{ item }}"
+    dest: "{{ item }}"
+    mode: push
+  delegate_to: "{{groups['app'][0]}}"
+  register: syncfile
+  with_items:
+   - "/tmp/mwi.jar"
+  when: ansible_hostname == "{{groups['app'][1]}}"
+
+- name: Run the unpack operation
+  become: yes
+  become_user: weblogic
+  shell: "{{ wlshome }}/common/bin/unpack.sh -domain={{domainroot}}/{{domain_name}} -template=/tmp/mwi.jar"
+  register: unpack
+  tags: app,unpack,packit
+  when: ansible_hostname == "{{groups['app'][1]}}"
+
+
+
+- name: set the SSL listener to false in nodemanager.properties file
+  tags: replaceline
+  become: yes
+  become_user: weblogic
+  lineinfile:
+    dest: "{{ domainroot}}/{{ domain_name }}/nodemanager/nodemanager.properties"
+    regexp: '{{item.from}}'
+    line: '{{item.to}}'
+    state: present
+    backup: yes
+  register: replaceline
+  with_items:
+     - { from: "^SecureListener=true" , to: "SecureListener=false" }
+     - { from: "^ListenAddress=localhost" , to: "ListenAddress=" }
+
+- name: start the nodemanager
+  tags: startnodemanager
+  become: yes
+  become_user: weblogic
+  shell: "./startNodeManager.sh > nodemanager.log &"
+  args:
+    chdir: "{{domainroot}}/{{domain_name}}/bin/"
+  register: startNodemanager
+
+
+- name: wait for the nodemanager to start and open the port
+  tags: nmvalidate
+  wait_for:
+    host: "localhost"
+    port: 5556
+    delay: 10
+    timeout: 120
+    state: started

@@ -32,7 +32,7 @@ if administration_port_enabled != "false":
 # =================================================
 cd('/Servers/AdminServer')
 set('Name', admin_name)
-set('ListenAddress', '')
+set('ListenAddress', '{{ hostvars[groups['app'][0]]['ansible_env'].SSH_CONNECTION.split(' ')[2] }}')
 set('ListenPort', admin_listen_port)
 if administration_port_enabled != "false":
    create('AdminServer','SSL')
@@ -87,19 +87,6 @@ cobj = create('{{ClusterName}}','Cluster')
 # ==============================================
 setOption('OverwriteDomain', 'true')
 setOption('ServerStartMode',production_mode)
-
-# Create Node Manager
-# ===================
-cd('/NMProperties')
-set('ListenAddress','')
-set('ListenPort',5556)
-set('CrashRecoveryEnabled', 'true')
-set('NativeVersionEnabled', 'true')
-set('StartScriptEnabled', 'false')
-set('SecureListener', 'false')
-set('LogLevel', 'FINEST')
-
-
 
 
 # Write Domain

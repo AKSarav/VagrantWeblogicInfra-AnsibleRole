@@ -1,6 +1,6 @@
 --- 
-- name: Apache Weblogic Infrastructure Build
-  hosts: webandapp
+- name: Weblogic Infrastructure build
+  hosts: multi
   #handlers:
     #- include: handlers/handlers.yaml
 
