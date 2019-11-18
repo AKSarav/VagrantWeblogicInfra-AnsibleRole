@@ -1,0 +1,26 @@
+--- 
+- name: Apache Weblogic Infrastructure Build
+  hosts: all
+  gather_facts: false
+  handlers:
+    - include: handlers/handlers.yaml
+  # tasks:
+  # - name: ec2
+  #   tags: ec2
+  #   include_role:
+  #     name:  ec2-creation
+
+- hosts: localhost 
+  gather_facts: False
+  roles:
+    - setup-apache
+
+- hosts: web
+  gather_facts: true
+  roles:
+    - setup-apache
+
+- hosts: app
+  gather_facts: true
+  roles:
+    - setup-weblogic

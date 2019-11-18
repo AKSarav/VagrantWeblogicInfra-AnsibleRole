@@ -1,0 +1,36 @@
+connect('{{domain_username}}','{{domain_password}}','t3://localhost:{{admin_ListenPort}}')
+edit()
+startEdit()
+
+
+# Map Machines and Cluster
+# ========================
+cd ('/Servers/'+'{{ManagedServer1_Name}}')
+mbean_name='/Machines/'+'{{ groups['app'][0] }}'
+cmo.setMachine(getMBean(mbean_name))
+cbean_name='/Clusters/'+'{{ClusterName}}'
+cmo.setCluster(getMBean(cbean_name))
+
+cd ('/Servers/'+'{{ManagedServer2_Name}}')
+mbean_name='/Machines/'+'{{ groups['app'][1] }}'
+cmo.setMachine(getMBean(mbean_name))
+cbean_name='/Clusters/'+'{{ClusterName}}'
+cmo.setCluster(getMBean(cbean_name))
+
+# Set NodeManager Properties to Plain SSL
+# =======================================
+cd('/Machines/{{ groups['app'][0] }}/NodeManager/{{ groups['app'][0] }}')
+cmo.setNMType('Plain')
+cmo.setListenAddress('localhost')
+cmo.setDebugEnabled(false)
+cmo.setListenPort(5556)
+cd('/Machines/{{ groups['app'][1] }}/NodeManager/{{ groups['app'][1] }}')
+cmo.setNMType('Plain')
+cmo.setListenAddress('localhost')
+cmo.setDebugEnabled(false)
+cmo.setListenPort(5556)
+
+save()
+activate()
+
+
